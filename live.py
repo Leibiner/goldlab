@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from client import get_price, history  # noqa: E402
+from client import fallback_price, get_price, history  # noqa: E402
 import factors  # noqa: E402
 from engine import INITIAL_CASH, WARMUP, SimAccount, max_drawdown  # noqa: E402
 from personas import DcaGrandpa  # noqa: E402
@@ -105,12 +105,28 @@ def fresh_accounts():
 
 
 def in_trade_window(ts):
-    """招行积存金可交易窗口（银行官方公告截图 2026-10-09）：
-      本交易日 15:30 后 ~ 下一交易日 9:10 停止交易，【夜盘 20:00-02:30 除外】
-    即：9:10-15:30（日盘，午休无行情自然无 tick）+ 20:00-02:30（夜盘，含凌晨 00:00-02:30）。
-    15:30-20:00、02:30-9:10 两个闭市窗口内绝不成交。"""
+    """招行官网通告：积存金主动买卖时间 = 交易日 9:10 — 次日凌晨 2:00（连续不断档）。
+    15:30-20:00 上金所休市但银行受理，用 gap_tick() 的国际金价估价补行情成交。
+    凌晨 2:00-9:10 不成交。"""
     hm = ts[11:16]
-    return ("09:10" <= hm <= "15:30") or hm >= "20:00" or hm <= "02:30"
+    return hm >= "09:10" or hm <= "02:00"
+
+
+def gap_tick(now_dt, ticks):
+    """交易所行间空窗（日盘 15:30 收盘后、夜盘 20:00 开盘前）生成一根估价分钟线：
+    价 = 国际金价 × 汇率折算（与银行间段自行报价的原理一致），日期沿用最后一个
+    交易所分钟线的交易日标签。周末/休市日标签对不上自然不生成。"""
+    hm = now_dt.strftime("%H:%M")
+    if not ("15:30" < hm < "20:00") or not ticks:
+        return None
+    last_ts, last_price, last_date = ticks[-1]
+    if last_ts[:10] != now_dt.strftime("%Y-%m-%d") or last_ts[11:16] < "15:29":
+        return None
+    try:
+        est, _ = fallback_price()
+    except Exception:
+        return None
+    return (f"{last_date} {hm}:00", float(est), last_date)
 
 
 def step():
@@ -127,6 +143,11 @@ def step():
     new = [t for t in ticks if (st["last_ts"] is None or t[0] > st["last_ts"]) and in_trade_window(t[0])]
     if st["last_ts"] is None and new:
         new = new[-1:]  # 冷启动只吃最新一分钟，不吃历史分钟风暴
+    synth = set()
+    gt = gap_tick(datetime.now(TZ), ticks)
+    if gt and gt[0] > (st["last_ts"] or "") and (not new or gt[0] > new[-1][0]):
+        new.append(gt)
+        synth.add(gt[0])
     fired = 0
     for ts, price, date in new:
         if date != st["last_date"]:
@@ -145,7 +166,7 @@ def step():
             sig = p.decide(series, acct, ctx)
             if sig:
                 action, param, reason = sig
-                stamp = f"｜{ts[11:16]} 盘中成交"
+                stamp = f"｜{ts[11:16]} {'银行估价' if ts in synth else '盘中'}成交"
                 ok = (acct.buy(price, param, reason + stamp, date) if action == "buy"
                       else acct.sell(price, param, reason + stamp, date))
                 if ok:
@@ -161,8 +182,10 @@ def build_payload(no_position=False):
     st, _, _ = step()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     hist = [h for h in history(BOOT_DAYS) if h["date"] != today]
-    tick = get_minutes()[-1]
-    price, ts_disp = tick[1], tick[0]
+    ts_disp = st["last_ts"] or "尚无行情"
+    price = st["price_daily"].get(st["last_date"])
+    if price is None:
+        price = get_minutes()[-1][1]
     day_dates = [h["date"] for h in hist[WARMUP:]]
     live_days = sorted(d for d in st["price_daily"] if d > day_dates[-1])
     dates = day_dates + live_days
@@ -191,7 +214,9 @@ def build_payload(no_position=False):
         })
     pos = json.loads(POS_FILE.read_text()) if (POS_FILE.exists() and not no_position) else None
     return {
-        "updated": f"{ts_disp}（最新分钟）", "source": "SGE Au99.99 分钟线 · 连续模拟", "price": price,
+        "updated": f"{ts_disp}（最新一笔）",
+        "source": "SGE Au99.99 分钟线 · 招行盘口" + ("（银行估价段）" if "15:30" < ts_disp[11:16] < "20:00" else ""),
+        "price": price,
         "real_position": ({**pos, "value": round(pos["grams"] * price, 2),
                            "pnl_pct": round((price / pos["cost"] - 1) * 100, 2)} if pos else None),
         "history": [{"date": d, "close": closes.get(d, st["price_daily"].get(d, price))} for d in dates],
