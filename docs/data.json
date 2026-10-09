@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-12 20:36:00（最新分钟）",
+ "updated": "2026-10-12 20:40:00（最新分钟）",
  "source": "SGE Au99.99 分钟线 · 连续模拟",
  "price": 903.99,
  "real_position": null,
@@ -1322,7 +1322,7 @@
   },
   {
    "date": "2026-10-12",
-   "close": 900.6
+   "close": 903.99
   }
  ],
  "personas": [
@@ -2721,7 +2721,7 @@
     null,
     null,
     null,
-    49990.29
+    50056.13
    ],
    "live_mode": true,
    "last_action": {

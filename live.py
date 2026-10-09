@@ -104,12 +104,13 @@ def fresh_accounts():
             "day_index": 0, "price_daily": {}, "personas": personas}
 
 
-def in_day_session(ts):
-    """只允许在上金所日盘时段成交（09:00-11:30 / 13:30-15:30）。
-    用户实测：招行积存金夜盘（20:00-02:30）只报价不可交易，模拟盘对齐真实可操作窗口。
-    夜盘/凌晨的分钟线只用于展示最新价，不喂给角色。"""
+def in_trade_window(ts):
+    """招行积存金可交易窗口（银行官方公告截图 2026-10-09）：
+      本交易日 15:30 后 ~ 下一交易日 9:10 停止交易，【夜盘 20:00-02:30 除外】
+    即：9:10-15:30（日盘，午休无行情自然无 tick）+ 20:00-02:30（夜盘，含凌晨 00:00-02:30）。
+    15:30-20:00、02:30-9:10 两个闭市窗口内绝不成交。"""
     hm = ts[11:16]
-    return "09:00" <= hm <= "11:30" or "13:30" <= hm <= "15:30"
+    return ("09:10" <= hm <= "15:30") or hm >= "20:00" or hm <= "02:30"
 
 
 def step():
@@ -123,7 +124,7 @@ def step():
     closes_yday = [h["close"] for h in hist_yday]
 
     ticks = get_minutes()
-    new = [t for t in ticks if (st["last_ts"] is None or t[0] > st["last_ts"]) and in_day_session(t[0])]
+    new = [t for t in ticks if (st["last_ts"] is None or t[0] > st["last_ts"]) and in_trade_window(t[0])]
     if st["last_ts"] is None and new:
         new = new[-1:]  # 冷启动只吃最新一分钟，不吃历史分钟风暴
     fired = 0
