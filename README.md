@@ -27,6 +27,20 @@ python3 -m http.server 8123 -d docs                             # 本地看前�
 
 个人实盘成本（可选）：建 `position.json`，内容 `{"grams": 15.0, "cost": 922.0}`——已 gitignore，不会推到仓库。
 
+## 连续模拟（live.py）
+
+回测是"每天收盘重放"，`live.py` 是**真·连续盘**：首次用 250 日回测给角色建仓，
+之后每 5 分钟（systemd timer）拉上金所分钟线，条件首次成立即按当时价格成交，
+持仓/现金/锚价全部持久化在 `live_state.json`（gitignore），跨运行累积、永不重置。
+触发节奏：网格蛛盯每根分钟线；狼/狐盘中每分钟评估、当日只动手一次；爷爷每个交易日第一笔行情定投。
+
+```bash
+../.venv/bin/python live.py step      # 手动推进一格
+../.venv/bin/python live.py publish   # 生成前端数据（--no-position 脱敏）
+../.venv/bin/python live.py status    # 看账户
+../.venv/bin/python live.py reset     # 清状态重来
+```
+
 ## 免责
 
 纯模拟研究，不构成投资建议。点差、滑点做了简化；上金所非交易时段返回的是最后成交价。

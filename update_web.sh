@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 export PATH="/usr/local/bin:/usr/bin:/bin"
 PY="$HOME/Documents/ClaudeCode/gold/.venv/bin/python"
 
-if ! "$PY" run.py json --no-position > docs/data.json.tmp 2>>update_web.log; then
+if ! "$PY" live.py publish --no-position > docs/data.json.tmp 2>>update_web.log; then
   echo "[$(date '+%F %T')] 取数失败，保留旧 data.json" >> update_web.log
   rm -f docs/data.json.tmp
   exit 1

@@ -271,9 +271,16 @@ function renderPersonas() {
   DATA.personas.forEach((p) => {
     const d = document.createElement("div"); d.className = "pcard";
     const cls = p.return_pct >= 0 ? "up" : "down";
-    const sig = p.live_signal
-      ? `<div class="signal ${p.live_signal.action === "buy" ? "buy" : "sell"}">🔴 ${p.live_signal.action === "buy" ? "现在想买" : "现在想卖"}：${esc(p.live_signal.reason)}<br>→ ${esc(p.live_signal.estimate)}</div>`
-      : `<div class="signal hold">⚪ 此刻按兵不动</div>`;
+    let sig;
+    if (p.live_signal) {
+      sig = `<div class="signal ${p.live_signal.action === "buy" ? "buy" : "sell"}">🔴 ${p.live_signal.action === "buy" ? "现在想买" : "现在想卖"}：${esc(p.live_signal.reason)}<br>→ ${esc(p.live_signal.estimate)}</div>`;
+    } else if (p.live_mode) {
+      sig = p.last_action
+        ? `<div class="signal ${p.last_action.side}">🟢 连续盘运行中<br>最近成交：${p.last_action.date} ${p.last_action.side === "buy" ? "买入" : "卖出"} @${p.last_action.price}（${p.last_action.grams}克）</div>`
+        : `<div class="signal hold">🟢 连续盘运行中，尚无成交</div>`;
+    } else {
+      sig = `<div class="signal hold">⚪ 此刻按兵不动</div>`;
+    }
     d.innerHTML = `<div><span class="pname">${p.emoji} ${esc(p.name)}</span><span class="pstyle">${esc(p.style)}</span></div>
       <div class="pdesc">${esc(p.desc)}</div>
       <div class="pnums">
@@ -294,7 +301,9 @@ function renderTables() {
       <td>${p.emoji} ${esc(p.name)}</td><td>${esc(p.style)}</td><td>${esc(p.desc)}</td>
       <td>${fmt(p.equity)}</td><td class="${p.return_pct >= 0 ? "up" : "down"}">${pct(p.return_pct)}</td>
       <td>${p.max_dd_pct}%</td><td>${fmt(p.cash)}</td><td>${p.grams}</td>
-      <td>${p.live_signal ? esc(p.live_signal.estimate) : "按兵不动"}</td></tr>`).join("");
+      <td>${p.live_signal ? esc(p.live_signal.estimate)
+        : p.live_mode ? (p.last_action ? `${p.last_action.date} ${p.last_action.side === "buy" ? "买入" : "卖出"}` : "今日无动作")
+        : "按兵不动"}</td></tr>`).join("");
   const tt = document.getElementById("tTable");
   const rows = DATA.personas.flatMap((p) => p.trades.slice(-6).map((t) =>
     `<tr><td>${p.emoji}${esc(p.name)}</td><td>${t.date}</td>

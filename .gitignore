@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .venv/
 update_web.log
+live_state.json
+step.log
