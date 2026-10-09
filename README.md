@@ -21,8 +21,8 @@
 cd gold && uv venv .venv && uv pip install -p .venv/bin/python akshare "requests[socks]"
 cd goldlab && ../.venv/bin/python run.py backtest --days 250   # 回测
 ../.venv/bin/python run.py live                                # 实时信号
-../.venv/bin/python run.py json > web/data.json                # 生成前端数据
-python3 -m http.server 8123 -d web                             # 本地看前端
+../.venv/bin/python run.py json > docs/data.json                # 生成前端数据
+python3 -m http.server 8123 -d docs                             # 本地看前端
 ```
 
 个人实盘成本（可选）：建 `position.json`，内容 `{"grams": 15.0, "cost": 922.0}`——已 gitignore，不会推到仓库。
