@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>goldlab · 黄金策略角色模拟盘</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --surface-1:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --up:#006300; --down:#d03b3b;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#4a3aa7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface-1:#1a1a19; --page:#0d0d0d; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+    --up:#0ca30c; --down:#d03b3b;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#9085e9;
+  }
+}
+* { box-sizing:border-box }
+body { margin:0; background:var(--page); color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+.wrap { max-width:1080px; margin:0 auto; padding:20px 16px 48px }
+h1 { font-size:20px; margin:4px 0 2px }
+.meta { color:var(--muted); font-size:13px }
+.tiles { display:flex; flex-wrap:wrap; gap:12px; margin:18px 0 }
+.tile { background:var(--surface-1); border:1px solid var(--ring); border-radius:12px;
+  padding:14px 18px; min-width:180px; flex:1 }
+.tile .label { color:var(--ink-2); font-size:13px }
+.tile .value { font-size:48px; font-weight:600; line-height:1.15 }
+.tile .value small { font-size:16px; font-weight:400; color:var(--ink-2) }
+.tile .sub { color:var(--ink-2); font-size:13px }
+.tile .small-num { font-size:28px }
+.up { color:var(--up) } .down { color:var(--down) }
+.filters { display:flex; gap:8px; margin:10px 0 14px }
+.filters button { border:1px solid var(--ring); background:var(--surface-1); color:var(--ink-2);
+  border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer }
+.filters button[aria-pressed="true"] { color:var(--ink); border-color:var(--ink-2); font-weight:600 }
+.card { background:var(--surface-1); border:1px solid var(--ring); border-radius:12px;
+  padding:16px; margin-bottom:16px }
+.card h2 { font-size:15px; margin:0 0 2px }
+.card .cap { color:var(--muted); font-size:12px; margin:0 0 8px }
+svg { display:block; width:100%; height:auto }
+.grid { stroke:var(--grid); stroke-width:1 }
+.axis { stroke:var(--axis); stroke-width:1 }
+.tick { fill:var(--muted); font-size:11px; font-variant-numeric:tabular-nums }
+.endlabel { font-size:11px; fill:var(--ink-2); paint-order:stroke;
+  stroke:var(--surface-1); stroke-width:3px; stroke-linejoin:round }
+.leader { stroke:var(--muted); stroke-width:1 }
+.legend { display:flex; flex-wrap:wrap; gap:14px; margin:6px 0 2px; font-size:12px; color:var(--ink-2) }
+.legend i { display:inline-block; width:14px; height:2px; vertical-align:4px; margin-right:5px }
+#tooltip { position:fixed; z-index:10; pointer-events:none; display:none; max-width:260px;
+  background:var(--surface-1); border:1px solid var(--ring); border-radius:8px;
+  padding:8px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.12) }
+#tooltip .tt-date { color:var(--muted); margin-bottom:4px }
+#tooltip .tt-row { display:flex; align-items:baseline; gap:6px; margin:2px 0 }
+#tooltip .tt-row i { width:12px; height:2px; flex:none; margin-top:6px }
+#tooltip .tt-val { font-weight:600; font-variant-numeric:tabular-nums }
+#tooltip .tt-name { color:var(--ink-2) }
+.personas { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px }
+.pcard { background:var(--surface-1); border:1px solid var(--ring); border-radius:12px; padding:14px }
+.pcard .pname { font-weight:600 }
+.pcard .pstyle { color:var(--muted); font-size:12px; margin-left:6px }
+.pcard .pdesc { color:var(--ink-2); font-size:12px; margin:4px 0 8px }
+.pcard .pnums { display:flex; gap:14px; font-size:13px; margin-bottom:8px; flex-wrap:wrap }
+.pcard .pnums b { display:block; font-variant-numeric:tabular-nums }
+.pcard .pnums span { color:var(--muted); font-size:11px }
+.signal { font-size:12px; border-radius:8px; padding:7px 9px }
+.signal.buy { background:color-mix(in srgb, var(--s1) 12%, var(--surface-1)); }
+.signal.sell { background:color-mix(in srgb, var(--s2) 12%, var(--surface-1)); }
+.signal.hold { color:var(--muted) }
+table { width:100%; border-collapse:collapse; font-size:12px; font-variant-numeric:tabular-nums }
+th { text-align:left; color:var(--muted); font-weight:500; padding:6px 8px; border-bottom:1px solid var(--grid) }
+td { padding:6px 8px; border-bottom:1px solid var(--grid) }
+.empty { color:var(--muted); font-size:13px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>goldlab · 黄金策略角色模拟盘</h1>
+  <div class="meta" id="meta">数据加载中…（由 akshare 上金所数据驱动，每小时更新）</div>
+
+  <section class="tiles" id="tiles"></section>
+
+  <div class="filters" role="group" aria-label="时间范围">
+    <button data-days="30">近 30 日</button>
+    <button data-days="90">近 90 日</button>
+    <button data-days="0" aria-pressed="true">全部</button>
+  </div>
+
+  <div class="card"><h2>上金所 Au99.99 金价</h2><p class="cap">元/克 · 单一线条，无图例（标题即系列名）</p>
+    <div id="priceChart"></div></div>
+
+  <div class="card"><h2>四个角色 vs 拿住不动（同期收益对比）</h2><p class="cap">% 相对 5 万初始资金 · 基准=同期一直持有金价 · 曲线自回测第 21 日起（均线暖机期）</p>
+    <div class="legend" id="retLegend"></div>
+    <div id="retChart"></div></div>
+
+  <section class="personas" id="personas"></section>
+
+  <div class="card"><h2>角色总表</h2><p class="cap">图表的颜色编码在这里全部有等价文字（table view）</p>
+    <div style="overflow-x:auto"><table id="pTable"></table></div></div>
+
+  <div class="card"><h2>最近交易明细（每角色最后 6 笔）</h2>
+    <div style="overflow-x:auto"><table id="tTable"></table></div></div>
+</div>
+<div id="tooltip" role="status"></div>
+
+<script>
+"use strict";
+const CSSV = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 0) => v.toLocaleString("zh-CN", { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (v, d = 2) => (v >= 0 ? "+" : "") + v.toFixed(d) + "%";
+let DATA = null, RANGE = 0;
+
+async function load() {
+  const r = await fetch("data.json?ts=" + Date.now());
+  DATA = await r.json();
+  renderAll();
+}
+
+function personaColorVars() { return ["--s1", "--s2", "--s3", "--s4"]; }
+function benchColor() { return CSSV("--s5"); }
+
+/* ---------- 通用折线图：单轴、细线、点状十字光标 + 全系列 tooltip ---------- */
+function lineChart(mount, dates, series, opts) {
+  const el = document.getElementById(mount);
+  el.innerHTML = "";
+  const W = Math.max(el.clientWidth || 600, 320), H = opts.height || 260;
+  const padL = 52, padR = opts.labels ? 96 : 16, padT = 10, padB = 26;
+  const n = dates.length;
+  const xs = (i) => padL + (W - padL - padR) * (n === 1 ? 0 : i / (n - 1));
+  const all = series.flatMap(s => s.values);
+  let lo = Math.min(...all), hi = Math.max(...all);
+  if (opts.zeroBase) lo = Math.min(lo, 0);
+  const padY = (hi - lo) * 0.08 || 1; lo -= padY; hi += padY;
+  const ys = (v) => padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo));
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const add = (t, a) => { const e = document.createElementNS("http://www.w3.org/2000/svg", t);
+    for (const k in a) e.setAttribute(k, a[k]); svg.appendChild(e); return e; };
+  // 网格 + y 刻度（干净数字）
+  const step = cleanStep(lo, hi);
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
+    add("line", { class: "grid", x1: padL, x2: W - padR, y1: ys(v), y2: ys(v) });
+    const t = add("text", { class: "tick", x: padL - 6, y: ys(v) + 3, "text-anchor": "end" });
+    t.textContent = opts.unit === "%" ? v.toFixed(0) + "%" : fmt(v, v >= 1000 ? 0 : (step < 1 ? 1 : 0));
+  }
+  // x 轴基线 + 日期刻度（首/中/尾）
+  add("line", { class: "axis", x1: padL, x2: W - padR, y1: H - padB, y2: H - padB });
+  [[0, "start", padL], [(n - 1) >> 1, "middle", xs((n - 1) >> 1)], [n - 1, "end", W - padR]].forEach(([i, anc, x]) => {
+    const t = add("text", { class: "tick", x, y: H - padB + 16, "text-anchor": anc });
+    t.textContent = dates[i];
+  });
+  // 折线：2px 圆角端点，末端 ≥8px 圆点带 2px surface 环
+  series.forEach((s) => {
+    const d = s.values.map((v, i) => `${i ? "L" : "M"}${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join("");
+    add("path", { d, fill: "none", stroke: s.color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" });
+    add("circle", { cx: xs(n - 1), cy: ys(s.values[n - 1]), r: 4, fill: s.color,
+      stroke: CSSV("--surface-1"), "stroke-width": 2 });
+  });
+  // 末端直接标签 + 碰撞错位（引线连接）
+  if (opts.labels) {
+    const items = series.map(s => ({ s, y: ys(s.values[n - 1]), ty: 0 }))
+      .sort((a, b) => a.y - b.y);
+    items.forEach((it, i) => { it.ty = i === 0 ? it.y : Math.max(it.y, items[i - 1].ty + 16); });
+    items.forEach(it => { it.ty = Math.min(it.ty, H - padB - 6); });  // 不压日期轴
+    items.forEach((it) => {
+      const lx = W - padR + 6, anchorY = it.ty;
+      if (Math.abs(anchorY - it.y) > 4) add("line", { class: "leader", x1: W - padR, x2: lx, y1: it.y, y2: anchorY });
+      const t = add("text", { class: "endlabel", x: lx, y: anchorY + (Math.abs(anchorY - it.y) > 4 ? -3 : 4) });
+      t.textContent = `${it.s.name} ${opts.unit === "%" ? pct(it.s.values[n - 1], 1) : fmt(it.s.values[n - 1], 0)}`;
+    });
+  }
+  // 十字光标 + 全系列 tooltip
+  const hair = add("line", { class: "grid", x1: 0, x2: 0, y1: padT, y2: H - padB, style: "display:none" });
+  const hit = add("rect", { x: padL, y: padT, width: W - padL - padR, height: H - padT - padB, fill: "transparent" });
+  const tip = document.getElementById("tooltip");
+  const show = (evt) => {
+    const box = svg.getBoundingClientRect();
+    const px = (evt.clientX - box.left) * (W / box.width);
+    let i = Math.round((px - padL) / (W - padL - padR) * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    hair.setAttribute("x1", xs(i)); hair.setAttribute("x2", xs(i)); hair.style.display = "";
+    tip.innerHTML = "";
+    const dt = document.createElement("div"); dt.className = "tt-date"; dt.textContent = dates[i]; tip.appendChild(dt);
+    series.forEach((s) => {
+      const row = document.createElement("div"); row.className = "tt-row";
+      const key = document.createElement("i"); key.style.background = s.color;
+      const val = document.createElement("span"); val.className = "tt-val";
+      val.textContent = opts.unit === "%" ? pct(s.values[i], 1) : fmt(s.values[i], 1) + (opts.unit || "");
+      const name = document.createElement("span"); name.className = "tt-name"; name.textContent = s.name;
+      row.append(key, val, name); tip.appendChild(row);
+    });
+    tip.style.display = "block";
+    tip.style.left = Math.min(evt.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = (evt.clientY + 14) + "px";
+  };
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerleave", () => { hair.style.display = "none"; tip.style.display = "none"; });
+  el.appendChild(svg);
+}
+
+function cleanStep(lo, hi) {
+  const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  return [1, 2, 5, 10].map(m => m * mag).find(s => raw <= s) || 10 * mag;
+}
+
+/* ---------- 页面各区块 ---------- */
+function slice() {
+  const h = DATA.history, c = DATA.personas;
+  if (!RANGE || h.length <= RANGE) return { dates: h.map(x => x.date), prices: h.map(x => x.close),
+    curves: c.map(p => p.curve) };
+  const k = h.length - RANGE;
+  return { dates: h.slice(k).map(x => x.date), prices: h.slice(k).map(x => x.close),
+    curves: c.map(p => p.curve.slice(k)) };
+}
+
+function renderTiles() {
+  const box = document.getElementById("tiles");
+  box.innerHTML = "";
+  const price = mkTile("实时金价（" + DATA.source + "）",
+    `<span class="value">${fmt(DATA.price, 2)}<small> 元/克</small></span>`,
+    `更新于 ${DATA.updated}`);
+  box.appendChild(price);
+  if (DATA.real_position) {
+    const rp = DATA.real_position, cls = rp.pnl_pct >= 0 ? "up" : "down";
+    box.appendChild(mkTile("我的实盘（招行积存金）",
+      `<span class="value small-num">${fmt(rp.value)}<small> 元</small></span>`,
+      `${rp.grams} 克 @${rp.cost} · <span class="${cls}">${pct(rp.pnl_pct)}</span>`));
+  }
+  const best = [...DATA.personas].sort((a, b) => b.return_pct - a.return_pct)[0];
+  box.appendChild(mkTile("250 日最佳角色",
+    `<span class="value small-num">${best.emoji} ${best.name}</span>`,
+    `<span class="${best.return_pct >= 0 ? "up" : "down"}">${pct(best.return_pct)}</span> · ${best.trade_count} 笔交易`));
+}
+
+function mkTile(label, valueHtml, subHtml) {
+  const d = document.createElement("div"); d.className = "tile";
+  const l = document.createElement("div"); l.className = "label"; l.textContent = label;
+  const v = document.createElement("div"); v.innerHTML = valueHtml;
+  const s = document.createElement("div"); s.className = "sub"; s.innerHTML = subHtml;
+  d.append(l, v, s); return d;
+}
+
+function renderCharts() {
+  const { dates, prices, curves } = slice();
+  lineChart("priceChart", dates, [{ name: "Au99.99（元/克）", color: CSSV("--s1"), values: prices }],
+    { height: 240, labels: true });
+  const retSeries = DATA.personas.map((p, i) => ({
+    name: p.emoji + p.name, color: CSSV(personaColorVars()[i]),
+    values: curves[i].map(v => (v / 50000 - 1) * 100),
+  }));
+  const base = prices[0];
+  retSeries.push({ name: "📈 拿住金价", color: CSSV("--s5"), values: prices.map(p => (p / base - 1) * 100) });
+  lineChart("retChart", dates, retSeries, { height: 300, unit: "%", labels: true, zeroBase: true });
+  const lg = document.getElementById("retLegend");
+  lg.innerHTML = "";
+  retSeries.forEach((s) => {
+    const i = document.createElement("i"); i.style.background = s.color;
+    const t = document.createElement("span"); t.textContent = s.name;
+    const sp = document.createElement("span"); sp.append(i, t); lg.appendChild(sp);
+  });
+}
+
+function renderPersonas() {
+  const box = document.getElementById("personas"); box.innerHTML = "";
+  DATA.personas.forEach((p) => {
+    const d = document.createElement("div"); d.className = "pcard";
+    const cls = p.return_pct >= 0 ? "up" : "down";
+    const sig = p.live_signal
+      ? `<div class="signal ${p.live_signal.action === "buy" ? "buy" : "sell"}">🔴 ${p.live_signal.action === "buy" ? "现在想买" : "现在想卖"}：${esc(p.live_signal.reason)}<br>→ ${esc(p.live_signal.estimate)}</div>`
+      : `<div class="signal hold">⚪ 此刻按兵不动</div>`;
+    d.innerHTML = `<div><span class="pname">${p.emoji} ${esc(p.name)}</span><span class="pstyle">${esc(p.style)}</span></div>
+      <div class="pdesc">${esc(p.desc)}</div>
+      <div class="pnums">
+        <div><b>${fmt(p.equity)}</b><span>资产(元)</span></div>
+        <div><b class="${cls}">${pct(p.return_pct)}</b><span>收益</span></div>
+        <div><b>${p.max_dd_pct}%</b><span>最大回撤</span></div>
+        <div><b>${p.trade_count}</b><span>交易次数</span></div>
+        <div><b>${p.grams}g</b><span>持仓</span></div>
+      </div>${sig}`;
+    box.appendChild(d);
+  });
+}
+
+function renderTables() {
+  const pt = document.getElementById("pTable");
+  pt.innerHTML = `<tr><th>角色</th><th>风格</th><th>规则</th><th>资产</th><th>收益</th><th>回撤</th><th>现金</th><th>持仓(克)</th><th>此刻指令</th></tr>`
+    + DATA.personas.map((p) => `<tr>
+      <td>${p.emoji} ${esc(p.name)}</td><td>${esc(p.style)}</td><td>${esc(p.desc)}</td>
+      <td>${fmt(p.equity)}</td><td class="${p.return_pct >= 0 ? "up" : "down"}">${pct(p.return_pct)}</td>
+      <td>${p.max_dd_pct}%</td><td>${fmt(p.cash)}</td><td>${p.grams}</td>
+      <td>${p.live_signal ? esc(p.live_signal.estimate) : "按兵不动"}</td></tr>`).join("");
+  const tt = document.getElementById("tTable");
+  const rows = DATA.personas.flatMap((p) => p.trades.slice(-6).map((t) =>
+    `<tr><td>${p.emoji}${esc(p.name)}</td><td>${t.date}</td>
+     <td class="${t.side === "buy" ? "up" : "down"}">${t.side === "buy" ? "买入" : "卖出"}</td>
+     <td>${t.price}</td><td>${t.grams}</td><td>${fmt(t.amount)}</td><td>${esc(t.reason)}</td></tr>`));
+  tt.innerHTML = `<tr><th>角色</th><th>日期</th><th>方向</th><th>价格</th><th>克数</th><th>金额</th><th>理由</th></tr>` + rows.join("");
+}
+
+const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function renderAll() {
+  document.getElementById("meta").textContent =
+    `${DATA.source} · 更新 ${DATA.updated} · 回测窗口 250 交易日 · 每角色初始 5 万元 · 点差 0.5 元/克`;
+  renderTiles(); renderCharts(); renderPersonas(); renderTables();
+}
+
+document.querySelectorAll(".filters button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".filters button").forEach(x => x.removeAttribute("aria-pressed"));
+  b.setAttribute("aria-pressed", "true");
+  RANGE = +b.dataset.days; renderCharts();
+}));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => DATA && renderAll());
+load().catch(() => { document.getElementById("meta").textContent = "data.json 加载失败"; });
+</script>
+</body>
+</html>
