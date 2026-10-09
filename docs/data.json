@@ -1,7 +1,7 @@
 {
- "updated": "2026-10-12 20:40:00（最新分钟）",
+ "updated": "2026-10-12 21:04:00（最新分钟）",
  "source": "SGE Au99.99 分钟线 · 连续模拟",
- "price": 903.99,
+ "price": 901.0,
  "real_position": null,
  "history": [
   {
@@ -1322,7 +1322,7 @@
   },
   {
    "date": "2026-10-12",
-   "close": 903.99
+   "close": 901.0
   }
  ],
  "personas": [
@@ -2375,8 +2375,8 @@
    "emoji": "🧘",
    "style": "目标配置",
    "desc": "目标仓位50%，每月检查一次，偏离超10个百分点分批纠偏(每次最多动现金的35%)，不预测只再平衡",
-   "equity": 50056.13,
-   "return_pct": 0.11,
+   "equity": 49998.06,
+   "return_pct": -0.0,
    "max_dd_pct": 0.0,
    "trade_count": 1,
    "cash": 32500.0,
@@ -2721,7 +2721,7 @@
     null,
     null,
     null,
-    50056.13
+    49998.06
    ],
    "live_mode": true,
    "last_action": {
