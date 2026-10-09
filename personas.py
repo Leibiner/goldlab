@@ -16,7 +16,7 @@ class Persona:
     style = ""
     desc = ""
 
-    def decide(self, series, acct):
+    def decide(self, series, acct, ctx=None):
         raise NotImplementedError
 
 
@@ -29,7 +29,7 @@ class DcaGrandpa(Persona):
     def __init__(self):
         self.day_count = 0
 
-    def decide(self, series, acct):
+    def decide(self, series, acct, ctx=None):
         self.day_count += 1
         if self.day_count % self.PER_DAYS == 0 and acct.cash >= self.AMOUNT:
             return ("buy", self.AMOUNT, f"第{self.day_count}个交易日，定投日雷打不动")
@@ -52,7 +52,7 @@ class TrendWolf(Persona):
             return "death"
         return None
 
-    def decide(self, series, acct):
+    def decide(self, series, acct, ctx=None):
         cross = self._cross(series)
         price = series[-1]
         if cross == "golden" and acct.cash > 1000:
@@ -70,7 +70,7 @@ class ReversionFox(Persona):
 
     BAND = 0.03
 
-    def decide(self, series, acct):
+    def decide(self, series, acct, ctx=None):
         base = ma(series, 20)
         if base is None:
             return None
@@ -94,7 +94,7 @@ class GridSpider(Persona):
     def __init__(self):
         self.anchor = None
 
-    def decide(self, series, acct):
+    def decide(self, series, acct, ctx=None):
         price = series[-1]
         if self.anchor is None:
             self.anchor = price

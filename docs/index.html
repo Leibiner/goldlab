@@ -94,7 +94,7 @@ td { padding:6px 8px; border-bottom:1px solid var(--grid) }
   <div class="card"><h2>上金所 Au99.99 金价</h2><p class="cap">元/克 · 单一线条，无图例（标题即系列名）</p>
     <div id="priceChart"></div></div>
 
-  <div class="card"><h2>四个角色 vs 拿住不动（同期收益对比）</h2><p class="cap">% 相对 5 万初始资金 · 基准=同期一直持有金价 · 曲线自回测第 21 日起（均线暖机期）</p>
+  <div class="card"><h2>角色 vs 拿住不动（同期收益对比）</h2><p class="cap">% 相对 5 万初始资金 · 基准=同期一直持有金价 · 曲线自回测第 21 日起（均线暖机期）</p>
     <div class="legend" id="retLegend"></div>
     <div id="retChart"></div></div>
 
@@ -233,7 +233,7 @@ function renderTiles() {
       `${rp.grams} 克 @${rp.cost} · <span class="${cls}">${pct(rp.pnl_pct)}</span>`));
   }
   const best = [...DATA.personas].sort((a, b) => b.return_pct - a.return_pct)[0];
-  box.appendChild(mkTile("250 日最佳角色",
+  box.appendChild(mkTile("回测期最佳角色",
     `<span class="value small-num">${best.emoji} ${best.name}</span>`,
     `<span class="${best.return_pct >= 0 ? "up" : "down"}">${pct(best.return_pct)}</span> · ${best.trade_count} 笔交易`));
 }
@@ -316,7 +316,7 @@ const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">
 
 function renderAll() {
   document.getElementById("meta").textContent =
-    `${DATA.source} · 更新 ${DATA.updated} · 回测窗口 250 交易日 · 每角色初始 5 万元 · 点差 0.5 元/克`;
+    `${DATA.source} · 更新 ${DATA.updated} · 回测窗口 ${DATA.history.length} 交易日 · 每角色初始 5 万元 · 点差 0.5 元/克`;
   renderTiles(); renderCharts(); renderPersonas(); renderTables();
 }
 

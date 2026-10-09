@@ -1,19 +1,14 @@
-"""连续模拟盘：角色状态跨运行持久化，按上金所分钟行情在"条件首次成立时刻"成交。
+"""连续模拟盘 v2：因子+风控角色，状态跨运行持久化，按上金所分钟线即时成交。
 
-与回测的关系：首次 step 用 250 日日线回测给角色建仓（bootstrap，截至昨天），
-之后每次运行只处理上次之后新增的分钟线，成交进永久账本，永不重算。
+首次 step 用 350 日日线回测建仓（bootstrap，截至昨天，宏观因子按日对齐），
+之后每次运行只处理新增分钟线，成交进永久账本，永不重算。
 
 触发节奏：
-  🧓 定投爷爷  每个交易日第一次见到行情 → 定投一笔（每天恰好一次）
-  🐺 追趋势狼  盘中每分钟算一遍"今日收盘=现价"的假想K线，金叉/死叉首次成立即成交，当日不重复
-  🦊 捡漏狐    同上，偏离 MA20 ±3% 首次成立即成交，当日一次
-  🕸 网格蛛    每分钟盯锚价，±4% 立即成交一档（双向、当日可多次，锚价更新天然限频）
+  🧭宏观策略师/🛡趋势手/🎯反手狐/🧘配置管家  每根分钟线评估——v2 规则天然幂等
+      （买分支要求空仓、卖分支要求持仓、月度/批次数内部门控），不会当日反复打单
+  🧓定投爷爷(对照组)  每个交易日第一根分钟线定投一次
 
-用法:
-  python live.py step                 # 推进模拟（timer 每小时/每5分钟调）
-  python live.py publish [--no-position]  # 生成 docs/data.json
-  python live.py status               # 人读账户现状
-  python live.py reset                # 清状态，下次重新 bootstrap
+用法: step / publish [--no-position] / status / reset
 """
 import argparse
 import json
@@ -24,16 +19,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-import akshare as ak  # noqa: E402
 from client import get_price, history  # noqa: E402
+import factors  # noqa: E402
 from engine import INITIAL_CASH, WARMUP, SimAccount, max_drawdown  # noqa: E402
-from personas import ALL_PERSONAS, DcaGrandpa  # noqa: E402
+from personas import DcaGrandpa  # noqa: E402
+from personas2 import ALL_V2  # noqa: E402
 
 DIR = Path(__file__).parent
 STATE_FILE = DIR / "live_state.json"
 POS_FILE = DIR / "position.json"
 TZ = timezone(timedelta(hours=8))
-CLASSES = {c.__name__: c for c in ALL_PERSONAS}
+
+ROSTER = ALL_V2 + [DcaGrandpa]          # v2 四角色 + 爷爷对照组
+CLASSES = {c.__name__: c for c in ROSTER}
+BOOT_DAYS = 350
 
 
 def persona_key(name):
@@ -41,7 +40,8 @@ def persona_key(name):
 
 
 def get_minutes():
-    """SGE 当前交易日全部分钟线 [(ts, price, date)]，过滤无效价。"""
+    """SGE 当前交易日全部分钟线 [(ts, price, date)]。"""
+    import akshare as ak
     df = ak.spot_quotations_sge()
     df = df[df["品种"] == "Au99.99"]
     ticks = []
@@ -57,102 +57,98 @@ def get_minutes():
     return ticks
 
 
-def restore(cls_name, ps):
-    """从持久化状态还原一个全新的角色实例 + 账户。"""
-    p = CLASSES[cls_name]()
-    if ps.get("anchor") is not None:
-        p.anchor = ps["anchor"]
-    if ps.get("day_count") is not None:
-        p.day_count = ps["day_count"]
+def _simple(d):
+    return {k: v for k, v in d.items() if isinstance(v, (int, float, str, bool, type(None)))}
+
+
+def restore(ps):
+    p = CLASSES[ps["cls"]]()
+    p.__dict__.update(ps.get("pstate", {}))
     acct = SimAccount()
     acct.cash, acct.grams, acct.trades = ps["cash"], ps["grams"], ps["trades"]
+    acct.avg_cost = ps.get("avg_cost", 0.0)
     return p, acct
 
 
 def persist(ps, p, acct, ts, price):
     ps["cash"], ps["grams"], ps["trades"] = acct.cash, acct.grams, acct.trades
-    if hasattr(p, "anchor"):
-        ps["anchor"] = p.anchor
-    if hasattr(p, "day_count"):
-        ps["day_count"] = p.day_count
+    ps["avg_cost"] = acct.avg_cost
+    ps["pstate"] = _simple(p.__dict__)
     if len(ps["trades"]) > 300:
         ps["trades"] = ps["trades"][-300:]
     curve = ps["live_curve"]
-    # 每个交易日只留当日最后一个净值 + 最近 288 根分钟线，防膨胀
     if curve and curve[-1][0][:10] == ts[:10] and len(curve) > 288:
         curve.pop(-1)
     curve.append([ts, round(acct.equity(price), 2)])
-    days = {}
-    for t, v in curve:
-        days[t[:10]] = v
-    ps["daily_equity"] = [[d, v] for d, v in sorted(days.items())]
+    days = {d: v for d, v in ps["daily_equity"]}
+    days[ts[:10]] = round(acct.equity(price), 2)
+    ps["daily_equity"] = sorted(days.items())
 
 
-def bootstrap(hist_boot):
+def bootstrap(hist_boot, fdata):
+    """用日线回测给角色建仓；ctx 与实盘一致（date/index/factors）。"""
     closes = [h["close"] for h in hist_boot]
     personas = []
-    for cls in ALL_PERSONAS:
+    for cls in ROSTER:
         p, acct = cls(), SimAccount()
         curve = []
         for i in range(WARMUP, len(closes)):
             price = closes[i]
-            sig = p.decide(closes[: i + 1], acct)
+            h = hist_boot[i]
+            sig = p.decide(closes[: i + 1], acct,
+                           {"date": h["date"], "index": i,
+                            "factors": factors.score(h["date"], data=fdata)})
             if sig:
                 action, param, reason = sig
-                date = hist_boot[i]["date"]
                 if action == "buy":
-                    acct.buy(price, param, reason, date)
+                    acct.buy(price, param, reason, h["date"])
                 else:
-                    acct.sell(price, param, reason, date)
+                    acct.sell(price, param, reason, h["date"])
             curve.append(round(acct.equity(price), 2))
         personas.append({
             "key": persona_key(cls.__name__), "cls": cls.__name__,
-            "cash": acct.cash, "grams": acct.grams, "trades": acct.trades,
-            "anchor": getattr(p, "anchor", None), "day_count": getattr(p, "day_count", None),
-            "acted_on": None, "seen_day": None,
+            "cash": acct.cash, "grams": acct.grams, "avg_cost": acct.avg_cost,
+            "trades": acct.trades, "pstate": _simple(p.__dict__),
+            "seen_day": None,
             "boot_dates": [h["date"] for h in hist_boot[WARMUP:]],
-            "boot_curve": curve, "max_dd_pct": round(max_drawdown(curve) * 100, 2),
-            "live_curve": [], "daily_equity": [],
+            "boot_curve": curve, "live_curve": [], "daily_equity": [],
         })
-    return {"version": 1, "bootstrapped": datetime.now(TZ).isoformat(),
-            "last_ts": None, "last_date": hist_boot[-1]["date"], "price_daily": {},
-            "personas": personas}
+    return {"version": 2, "bootstrapped": datetime.now(TZ).isoformat(),
+            "last_ts": None, "last_date": hist_boot[-1]["date"],
+            "day_index": len(closes) - WARMUP, "price_daily": {}, "personas": personas}
 
 
 def step():
     today = datetime.now(TZ).strftime("%Y-%m-%d")
-    if STATE_FILE.exists():
+    fdata = factors.load()
+    if STATE_FILE.exists() and json.loads(STATE_FILE.read_text()).get("version") == 2:
         st = json.loads(STATE_FILE.read_text())
-        hist_boot = None
+        hist_yday = [h for h in history(BOOT_DAYS) if h["date"] != today]
     else:
-        hist_boot = [h for h in history(250) if h["date"] != today]
-        st = bootstrap(hist_boot)
-    hist_yday = hist_boot or [h for h in history(250) if h["date"] != today]
+        hist_yday = [h for h in history(BOOT_DAYS) if h["date"] != today]
+        st = bootstrap(hist_yday, fdata)
     closes_yday = [h["close"] for h in hist_yday]
 
     ticks = get_minutes()
     new = [t for t in ticks if st["last_ts"] is None or t[0] > st["last_ts"]]
-    if st["last_ts"] is None and new:  # 首次只从最新一分钟开始，不吃历史分钟风暴
-        new = new[-1:]
+    if st["last_ts"] is None and new:
+        new = new[-1:]  # 冷启动只吃最新一分钟，不吃历史分钟风暴
     fired = 0
     for ts, price, date in new:
+        if date != st["last_date"]:
+            st["day_index"] += 1
+            st["last_date"] = date
+        ctx = {"date": date, "index": st["day_index"],
+               "factors": factors.score(date, data=fdata)}
         series = closes_yday + [price]
         for ps in st["personas"]:
-            p, acct = restore(ps["cls"], ps)
+            p, acct = restore(ps)
             if ps["cls"] == DcaGrandpa.__name__:
-                # 爷爷：每个交易日只评估一次（当天第一根分钟线），其余分钟只记净值
-                if ps["seen_day"] == date:
+                if ps.get("seen_day") == date:
                     persist(ps, p, acct, ts, price)
                     continue
                 ps["seen_day"] = date
-                sig = p.decide(series, acct)
-            elif ps["cls"] == "GridSpider":
-                sig = p.decide(series, acct)  # 网格：每根都盯
-            else:
-                if ps["acted_on"] == date:
-                    sig = None
-                else:
-                    sig = p.decide(series, acct)
+            sig = p.decide(series, acct, ctx)
             if sig:
                 action, param, reason = sig
                 stamp = f"｜{ts[11:16]} 盘中成交"
@@ -160,20 +156,17 @@ def step():
                       else acct.sell(price, param, reason + stamp, date))
                 if ok:
                     fired += 1
-                    ps["acted_on"] = date
             persist(ps, p, acct, ts, price)
-        st["price_daily"][date] = price  # 每个交易日最后一根分钟价 ≈ 当日收盘
+        st["price_daily"][date] = price
         st["last_ts"] = ts
-        st["last_date"] = date
     STATE_FILE.write_text(json.dumps(st, ensure_ascii=False))
     return st, fired, (ticks[-1] if ticks else None)
 
 
 def build_payload(no_position=False):
-    """推进一格模拟后，生成前端 data.json。dates = 日线日期(截至昨天) + live 新增日期。"""
     st, _, _ = step()
     today = datetime.now(TZ).strftime("%Y-%m-%d")
-    hist = [h for h in history(250) if h["date"] != today]
+    hist = [h for h in history(BOOT_DAYS) if h["date"] != today]
     tick = get_minutes()[-1]
     price, ts_disp = tick[1], tick[0]
     day_dates = [h["date"] for h in hist[WARMUP:]]
@@ -219,17 +212,21 @@ def main():
     args = ap.parse_args()
     if args.cmd == "reset":
         STATE_FILE.unlink(missing_ok=True)
-        print("状态已清除，下次 step/publish 重新 bootstrap")
+        print("状态已清除，下次 step/publish 重新 bootstrap（v2 阵容）")
     elif args.cmd == "step":
         st, fired, tick = step()
-        print(f"step ok: fired={fired} last_ts={st['last_ts']} last_tick={tick}")
+        print(f"step ok: fired={fired} last_ts={st['last_ts']}")
     elif args.cmd == "publish":
         json.dump(build_payload(args.no_position), sys.stdout, ensure_ascii=False, indent=1)
     else:
         st = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else step()[0]
+        price = st["price_daily"].get(max(st["price_daily"]), 0)
         for ps in st["personas"]:
-            print(f"{ps['key']:<14} cash={ps['cash']:>9.2f} grams={ps['grams']:>8.3f} "
-                  f"trades={len(ps['trades']):>3} anchor={ps['anchor']} day={ps['day_count']}")
+            eq = ps["cash"] + ps["grams"] * price
+            cls = CLASSES[ps["cls"]]
+            print(f"{cls.emoji}{cls.name:<7} 净值{eq:>9.0f} ({(eq/INITIAL_CASH-1)*100:+.2f}%) "
+                  f"持仓{ps['grams']:>7.2f}g 均价{ps.get('avg_cost', 0):>6.1f} 现金{ps['cash']:>8.0f} "
+                  f"笔数{len(ps['trades']):>2}")
         print("last_ts:", st["last_ts"])
 
 

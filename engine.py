@@ -11,6 +11,7 @@ class SimAccount:
     def __init__(self):
         self.cash = INITIAL_CASH
         self.grams = 0.0
+        self.avg_cost = 0.0  # 持仓加权均价（含点差），止损判断用
         self.trades = []
 
     def buy(self, price, amount, reason, date):
@@ -18,6 +19,7 @@ class SimAccount:
         if amount > self.cash or unit <= 0:
             return False
         grams = amount / unit
+        self.avg_cost = (self.avg_cost * self.grams + unit * grams) / (self.grams + grams)
         self.cash -= amount
         self.grams += grams
         self.trades.append({"date": date, "side": "buy", "price": round(price, 2),
@@ -31,6 +33,8 @@ class SimAccount:
             return False
         cash = grams * unit
         self.grams -= grams
+        if self.grams < 1e-12:
+            self.grams, self.avg_cost = 0.0, 0.0
         self.cash += cash
         self.trades.append({"date": date, "side": "sell", "price": round(price, 2),
                             "amount": round(cash, 2), "grams": round(grams, 3), "reason": reason})
@@ -55,8 +59,8 @@ class Simulator:
     def __init__(self, persona_classes):
         self.personas = [(cls(), SimAccount()) for cls in persona_classes]
 
-    def _step(self, persona, acct, series, date):
-        sig = persona.decide(series, acct)
+    def _step(self, persona, acct, series, date, ctx=None):
+        sig = persona.decide(series, acct, ctx)
         if not sig:
             return None
         action, param, reason = sig
@@ -73,7 +77,9 @@ class Simulator:
             series = closes[: i + 1]
             date = history[i]["date"]
             for k, (p, acct) in enumerate(self.personas):
-                decisions[k].append(self._step(p, acct, series, date))
+                ctx = {"date": date, "index": i,
+                       "factors": history[i].get("factors")}
+                decisions[k].append(self._step(p, acct, series, date, ctx))
                 curves[k].append(round(acct.equity(closes[i]), 2))
         results = []
         for (p, acct), curve, decs in zip(self.personas, curves, decisions):

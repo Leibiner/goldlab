@@ -87,16 +87,40 @@ def cmd_json(no_position=False):
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=1)
 
 
+def cmd_compare(days):
+    """v1（无脑人设）与 v2（因子+风控）在同一行情下的回测对比。"""
+    import factors
+    from personas import DcaGrandpa
+    from personas2 import ALL_V2
+    hist = history(days)
+    fdata = factors.load()
+    for h in hist:
+        h["factors"] = factors.score(h["date"], data=fdata)
+    print(f"回测: {hist[0]['date']} → {hist[-1]['date']}（{len(hist)}日, SGE Au99.99, 每角色5万）\n")
+    for tag, roster in [("v1 无脑人设", ALL_PERSONAS), ("v2 因子+风控", ALL_V2 + [DcaGrandpa])]:
+        print(f"── {tag} " + "─" * 40)
+        results = Simulator(roster).run_history(hist)
+        for r in results:
+            p = r["persona"]
+            print(f"  {p.emoji}{p.name:<7}{p.style:<8} 期末{r['account'].equity(r['final_price']):>7.0f} 元 "
+                  f"{r['return_pct']:>7.2f}%  回撤{r['max_dd_pct']:>6.2f}%  {r['trade_count']:>3}笔  {p.desc[:36]}")
+        print()
+    print(f"基准：同期金价 {((hist[-1]['close']/hist[0]['close'])-1)*100:+.2f}%")
+
+
 def main():
     ap = argparse.ArgumentParser(description="goldlab 模拟盘")
     sub = ap.add_subparsers(dest="cmd", required=True)
     bt = sub.add_parser("backtest"); bt.add_argument("--days", type=int, default=250)
+    cmp_ = sub.add_parser("compare"); cmp_.add_argument("--days", type=int, default=250)
     sub.add_parser("live")
     js = sub.add_parser("json")
     js.add_argument("--no-position", action="store_true", help="发布模式：剔除实盘成本")
     args = ap.parse_args()
     if args.cmd == "backtest":
         cmd_backtest(args.days)
+    elif args.cmd == "compare":
+        cmd_compare(args.days)
     elif args.cmd == "live":
         cmd_live()
     else:
