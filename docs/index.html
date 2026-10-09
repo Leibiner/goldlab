@@ -10,14 +10,14 @@
   --surface-1:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
   --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
   --up:#006300; --down:#d03b3b;
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#4a3aa7;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --p5:#e87ba4; --s5:#4a3aa7;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --surface-1:#1a1a19; --page:#0d0d0d; --ink:#fff; --ink-2:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
     --up:#0ca30c; --down:#d03b3b;
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#9085e9;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --p5:#d55181; --s5:#9085e9;
   }
 }
 * { box-sizing:border-box }
@@ -94,7 +94,7 @@ td { padding:6px 8px; border-bottom:1px solid var(--grid) }
   <div class="card"><h2>上金所 Au99.99 金价</h2><p class="cap">元/克 · 单一线条，无图例（标题即系列名）</p>
     <div id="priceChart"></div></div>
 
-  <div class="card"><h2>角色 vs 拿住不动（同期收益对比）</h2><p class="cap">% 相对 5 万初始资金 · 基准=同期一直持有金价 · 曲线自回测第 21 日起（均线暖机期）</p>
+  <div class="card"><h2>角色 vs 拿住不动（同期收益对比）</h2><p class="cap">% 相对 5 万初始资金 · 基准=同期一直持有金价 · 角色 2026-10-12 起白手起家，净值曲线只画真实模拟段</p>
     <div class="legend" id="retLegend"></div>
     <div id="retChart"></div></div>
 
@@ -121,7 +121,7 @@ async function load() {
   renderAll();
 }
 
-function personaColorVars() { return ["--s1", "--s2", "--s3", "--s4"]; }
+function personaColorVars() { return ["--s1", "--s2", "--s3", "--s4", "--p5"]; }
 function benchColor() { return CSSV("--s5"); }
 
 /* ---------- 通用折线图：单轴、细线、点状十字光标 + 全系列 tooltip ---------- */
@@ -132,7 +132,7 @@ function lineChart(mount, dates, series, opts) {
   const padL = 52, padR = opts.labels ? 96 : 16, padT = 10, padB = 26;
   const n = dates.length;
   const xs = (i) => padL + (W - padL - padR) * (n === 1 ? 0 : i / (n - 1));
-  const all = series.flatMap(s => s.values);
+  const all = series.flatMap(s => s.values).filter(v => v != null);
   let lo = Math.min(...all), hi = Math.max(...all);
   if (opts.zeroBase) lo = Math.min(lo, 0);
   const padY = (hi - lo) * 0.08 || 1; lo -= padY; hi += padY;
@@ -156,15 +156,26 @@ function lineChart(mount, dates, series, opts) {
   });
   // 折线：2px 圆角端点，末端 ≥8px 圆点带 2px surface 环
   series.forEach((s) => {
-    const d = s.values.map((v, i) => `${i ? "L" : "M"}${xs(i).toFixed(1)},${ys(v).toFixed(1)}`).join("");
+    let d = "", pen = false;  // null（模拟上线前）断线，不画假历史
+    s.values.forEach((v, i) => {
+      if (v == null) { pen = false; return; }
+      d += `${pen ? "L" : "M"}${xs(i).toFixed(1)},${ys(v).toFixed(1)}`;
+      pen = true;
+    });
+    if (!d) return;
     add("path", { d, fill: "none", stroke: s.color, "stroke-width": 2,
       "stroke-linejoin": "round", "stroke-linecap": "round" });
-    add("circle", { cx: xs(n - 1), cy: ys(s.values[n - 1]), r: 4, fill: s.color,
+    const li = s.values.reduce((a, v, i) => v != null ? i : a, -1);
+    add("circle", { cx: xs(li), cy: ys(s.values[li]), r: 4, fill: s.color,
       stroke: CSSV("--surface-1"), "stroke-width": 2 });
   });
   // 末端直接标签 + 碰撞错位（引线连接）
   if (opts.labels) {
-    const items = series.map(s => ({ s, y: ys(s.values[n - 1]), ty: 0 }))
+    const items = series.filter(s => s.values.some(v => v != null))
+      .map(s => {
+        const li = s.values.reduce((a, v, i) => v != null ? i : a, -1);
+        return { s, end: s.values[li], y: ys(s.values[li]), ty: 0 };
+      })
       .sort((a, b) => a.y - b.y);
     items.forEach((it, i) => { it.ty = i === 0 ? it.y : Math.max(it.y, items[i - 1].ty + 16); });
     items.forEach(it => { it.ty = Math.min(it.ty, H - padB - 6); });  // 不压日期轴
@@ -172,7 +183,7 @@ function lineChart(mount, dates, series, opts) {
       const lx = W - padR + 6, anchorY = it.ty;
       if (Math.abs(anchorY - it.y) > 4) add("line", { class: "leader", x1: W - padR, x2: lx, y1: it.y, y2: anchorY });
       const t = add("text", { class: "endlabel", x: lx, y: anchorY + (Math.abs(anchorY - it.y) > 4 ? -3 : 4) });
-      t.textContent = `${it.s.name} ${opts.unit === "%" ? pct(it.s.values[n - 1], 1) : fmt(it.s.values[n - 1], 0)}`;
+      t.textContent = `${it.s.name} ${opts.unit === "%" ? pct(it.end, 1) : fmt(it.end, 0)}`;
     });
   }
   // 十字光标 + 全系列 tooltip
@@ -191,7 +202,8 @@ function lineChart(mount, dates, series, opts) {
       const row = document.createElement("div"); row.className = "tt-row";
       const key = document.createElement("i"); key.style.background = s.color;
       const val = document.createElement("span"); val.className = "tt-val";
-      val.textContent = opts.unit === "%" ? pct(s.values[i], 1) : fmt(s.values[i], 1) + (opts.unit || "");
+      val.textContent = s.values[i] == null ? "—"
+        : opts.unit === "%" ? pct(s.values[i], 1) : fmt(s.values[i], 1) + (opts.unit || "");
       const name = document.createElement("span"); name.className = "tt-name"; name.textContent = s.name;
       row.append(key, val, name); tip.appendChild(row);
     });
@@ -251,8 +263,8 @@ function renderCharts() {
   lineChart("priceChart", dates, [{ name: "Au99.99（元/克）", color: CSSV("--s1"), values: prices }],
     { height: 240, labels: true });
   const retSeries = DATA.personas.map((p, i) => ({
-    name: p.emoji + p.name, color: CSSV(personaColorVars()[i]),
-    values: curves[i].map(v => (v / 50000 - 1) * 100),
+    name: p.emoji + p.name, color: CSSV(personaColorVars()[i % personaColorVars().length]),
+    values: curves[i].map(v => v == null ? null : (v / 50000 - 1) * 100),
   }));
   const base = prices[0];
   retSeries.push({ name: "📈 拿住金价", color: CSSV("--s5"), values: prices.map(p => (p / base - 1) * 100) });
@@ -316,7 +328,7 @@ const esc = (s) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">
 
 function renderAll() {
   document.getElementById("meta").textContent =
-    `${DATA.source} · 更新 ${DATA.updated} · 回测窗口 ${DATA.history.length} 交易日 · 每角色初始 5 万元 · 点差 0.5 元/克`;
+    `${DATA.source} · 更新 ${DATA.updated} · 金价历史 ${DATA.history.length} 交易日 · 角色白手起家 5 万元 · 点差 0.5 元/克`;
   renderTiles(); renderCharts(); renderPersonas(); renderTables();
 }
 

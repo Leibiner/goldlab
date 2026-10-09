@@ -1,7 +1,8 @@
 """连续模拟盘 v2：因子+风控角色，状态跨运行持久化，按上金所分钟线即时成交。
 
-首次 step 用 350 日日线回测建仓（bootstrap，截至昨天，宏观因子按日对齐），
-之后每次运行只处理新增分钟线，成交进永久账本，永不重算。
+白手起家（version 3）：每角色 5 万现金 0 持仓，不回放历史建仓。
+350 日历史价格只作为均线/RSI/宏观因子的输入；仓位轨迹从第一次实触发开始。
+每次运行只处理新增分钟线——SGE 只在真实交易时段产生新分钟，休市自动空转。
 
 触发节奏：
   🧭宏观策略师/🛡趋势手/🎯反手狐/🧘配置管家  每根分钟线评估——v2 规则天然幂等
@@ -85,48 +86,32 @@ def persist(ps, p, acct, ts, price):
     ps["daily_equity"] = sorted(days.items())
 
 
-def bootstrap(hist_boot, fdata):
-    """用日线回测给角色建仓；ctx 与实盘一致（date/index/factors）。"""
-    closes = [h["close"] for h in hist_boot]
+def fresh_accounts():
+    """白手起家：每角色 5 万现金 0 持仓，不回放历史。
+    历史价格只作为指标输入（算均线/RSI 用），仓位轨迹从第一次实触发开始。"""
     personas = []
     for cls in ROSTER:
-        p, acct = cls(), SimAccount()
-        curve = []
-        for i in range(WARMUP, len(closes)):
-            price = closes[i]
-            h = hist_boot[i]
-            sig = p.decide(closes[: i + 1], acct,
-                           {"date": h["date"], "index": i,
-                            "factors": factors.score(h["date"], data=fdata)})
-            if sig:
-                action, param, reason = sig
-                if action == "buy":
-                    acct.buy(price, param, reason, h["date"])
-                else:
-                    acct.sell(price, param, reason, h["date"])
-            curve.append(round(acct.equity(price), 2))
+        p = cls()
         personas.append({
             "key": persona_key(cls.__name__), "cls": cls.__name__,
-            "cash": acct.cash, "grams": acct.grams, "avg_cost": acct.avg_cost,
-            "trades": acct.trades, "pstate": _simple(p.__dict__),
+            "cash": INITIAL_CASH, "grams": 0.0, "avg_cost": 0.0,
+            "trades": [], "pstate": _simple(p.__dict__),
             "seen_day": None,
-            "boot_dates": [h["date"] for h in hist_boot[WARMUP:]],
-            "boot_curve": curve, "live_curve": [], "daily_equity": [],
+            "boot_dates": [], "boot_curve": [], "live_curve": [], "daily_equity": [],
         })
-    return {"version": 2, "bootstrapped": datetime.now(TZ).isoformat(),
-            "last_ts": None, "last_date": hist_boot[-1]["date"],
-            "day_index": len(closes) - WARMUP, "price_daily": {}, "personas": personas}
+    return {"version": 3, "started": datetime.now(TZ).isoformat(),
+            "last_ts": None, "last_date": None,
+            "day_index": 0, "price_daily": {}, "personas": personas}
 
 
 def step():
     today = datetime.now(TZ).strftime("%Y-%m-%d")
     fdata = factors.load()
-    if STATE_FILE.exists() and json.loads(STATE_FILE.read_text()).get("version") == 2:
+    if STATE_FILE.exists() and json.loads(STATE_FILE.read_text()).get("version") == 3:
         st = json.loads(STATE_FILE.read_text())
-        hist_yday = [h for h in history(BOOT_DAYS) if h["date"] != today]
     else:
-        hist_yday = [h for h in history(BOOT_DAYS) if h["date"] != today]
-        st = bootstrap(hist_yday, fdata)
+        st = fresh_accounts()
+    hist_yday = [h for h in history(BOOT_DAYS) if h["date"] != today]
     closes_yday = [h["close"] for h in hist_yday]
 
     ticks = get_minutes()
@@ -212,7 +197,7 @@ def main():
     args = ap.parse_args()
     if args.cmd == "reset":
         STATE_FILE.unlink(missing_ok=True)
-        print("状态已清除，下次 step/publish 重新 bootstrap（v2 阵容）")
+        print("状态已清除，下次 step/publish 白手起家（v3：5万现金0持仓，等真实行情触发）")
     elif args.cmd == "step":
         st, fired, tick = step()
         print(f"step ok: fired={fired} last_ts={st['last_ts']}")
