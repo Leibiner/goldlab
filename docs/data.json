@@ -1,7 +1,7 @@
 {
- "updated": "2026-10-12 23:57:00（最新一笔）",
+ "updated": "2026-10-13 20:04:00（最新一笔）",
  "source": "SGE Au99.99 分钟线 · 招行盘口",
- "price": 904.0,
+ "price": 900.99,
  "real_position": null,
  "history": [
   {
@@ -1323,6 +1323,10 @@
   {
    "date": "2026-10-12",
    "close": 904.0
+  },
+  {
+   "date": "2026-10-13",
+   "close": 900.99
   }
  ],
  "personas": [
@@ -1668,6 +1672,7 @@
     null,
     null,
     null,
+    50000.0,
     50000.0
    ],
    "live_mode": true,
@@ -2016,6 +2021,7 @@
     null,
     null,
     null,
+    50000.0,
     50000.0
    ],
    "live_mode": true,
@@ -2364,6 +2370,7 @@
     null,
     null,
     null,
+    50000.0,
     50000.0
    ],
    "live_mode": true,
@@ -2375,9 +2382,9 @@
    "emoji": "🧘",
    "style": "目标配置",
    "desc": "目标仓位50%，每月检查一次，偏离超10个百分点分批纠偏(每次最多动现金的35%)，不预测只再平衡",
-   "equity": 50056.32,
-   "return_pct": 0.11,
-   "max_dd_pct": 0.0,
+   "equity": 49997.86,
+   "return_pct": -0.0,
+   "max_dd_pct": -0.12,
    "trade_count": 1,
    "cash": 32500.0,
    "grams": 19.421,
@@ -2721,7 +2728,8 @@
     null,
     null,
     null,
-    50056.32
+    50056.32,
+    49997.86
    ],
    "live_mode": true,
    "last_action": {
@@ -3076,6 +3084,7 @@
     null,
     null,
     null,
+    50000.0,
     50000.0
    ],
    "live_mode": true,
