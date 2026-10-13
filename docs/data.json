@@ -5,10 +5,6 @@
  "real_position": null,
  "history": [
   {
-   "date": "2025-06-03",
-   "close": 778.5
-  },
-  {
    "date": "2025-06-04",
    "close": 779.46
   },
@@ -1671,7 +1667,6 @@
     null,
     null,
     null,
-    null,
     50000.0,
     50000.0
    ],
@@ -2020,7 +2015,6 @@
     null,
     null,
     null,
-    null,
     50000.0,
     50000.0
    ],
@@ -2041,7 +2035,6 @@
    "grams": 0.0,
    "trades": [],
    "curve": [
-    null,
     null,
     null,
     null,
@@ -2727,7 +2720,6 @@
     null,
     null,
     null,
-    null,
     50056.32,
     50025.25
    ],
@@ -2755,7 +2747,6 @@
    "grams": 0.0,
    "trades": [],
    "curve": [
-    null,
     null,
     null,
     null,
