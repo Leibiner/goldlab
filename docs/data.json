@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-10 23:04:00（最新一笔）",
+ "updated": "2026-11-10 23:56:00（最新一笔）",
  "source": "SGE Au99.99 分钟线 · 招行盘口",
  "price": 883.0,
  "real_position": null,
@@ -1322,7 +1322,7 @@
   },
   {
    "date": "2026-11-09",
-   "close": 869.9
+   "close": 881.0
   },
   {
    "date": "2026-11-10",
@@ -1684,13 +1684,22 @@
    "emoji": "🛡",
    "style": "趋势+风控",
    "desc": "MA5金叉MA20先买1/4现金；站稳20日新高才加第二批；亏6%止损、死叉清仓",
-   "equity": 50000.0,
-   "return_pct": 0.0,
-   "max_dd_pct": 0.0,
-   "trade_count": 0,
-   "cash": 50000.0,
-   "grams": 0.0,
-   "trades": [],
+   "equity": 49992.93,
+   "return_pct": -0.01,
+   "max_dd_pct": -0.01,
+   "trade_count": 1,
+   "cash": 37500.0,
+   "grams": 14.148,
+   "trades": [
+    {
+     "date": "2026-11-10",
+     "side": "buy",
+     "price": 883.0,
+     "amount": 12500.0,
+     "grams": 14.148,
+     "reason": "MA5(876.1)金叉MA20(873.9)，首仓25%进场12500元｜23:54 盘中成交"
+    }
+   ],
    "curve": [
     null,
     null,
@@ -2022,10 +2031,17 @@
     50000.0,
     50000.0,
     50000.0,
-    50000.0
+    49992.93
    ],
    "live_mode": true,
-   "last_action": null,
+   "last_action": {
+    "date": "2026-11-10",
+    "side": "buy",
+    "price": 883.0,
+    "amount": 12500.0,
+    "grams": 14.148,
+    "reason": "MA5(876.1)金叉MA20(873.9)，首仓25%进场12500元｜23:54 盘中成交"
+   },
    "live_signal": null
   },
   {
