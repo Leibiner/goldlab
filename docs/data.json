@@ -5,10 +5,6 @@
  "real_position": null,
  "history": [
   {
-   "date": "2025-07-18",
-   "close": 773.5
-  },
-  {
    "date": "2025-07-21",
    "close": 777.34
   },
@@ -1638,7 +1634,6 @@
     null,
     null,
     null,
-    null,
     50000.0,
     50000.0,
     50000.0,
@@ -1709,7 +1704,6 @@
     }
    ],
    "curve": [
-    null,
     null,
     null,
     null,
@@ -2385,7 +2379,6 @@
     null,
     null,
     null,
-    null,
     50000.0,
     50000.0,
     50000.0,
@@ -2463,7 +2456,6 @@
     }
    ],
    "curve": [
-    null,
     null,
     null,
     null,
@@ -2876,7 +2868,6 @@
     }
    ],
    "curve": [
-    null,
     null,
     null,
     null,
